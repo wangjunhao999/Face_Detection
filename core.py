@@ -10,15 +10,18 @@ import webbrowser
 import winsound
 from configparser import ConfigParser
 from datetime import datetime
+from tkinter import Image
 
 import cv2
 import dlib
+import numpy
 import telegram
 from PyQt5.QtCore import pyqtSignal, QThread, QTimer, Qt, QRegExp
 from PyQt5.QtGui import QIcon, QImage, QPixmap, QRegExpValidator, QTextCursor
 from PyQt5.QtWidgets import QMainWindow, QApplication, QMessageBox, QDialog
 from PyQt5.uic import loadUi
 from PyQt5.uic.properties import QtGui
+from PIL import Image, ImageDraw, ImageFont
 
 
 class TrainingDataNotFoundError(FileNotFoundError):  # 训练数据没有找到错误
@@ -182,6 +185,7 @@ class FaceProcessingThread(QThread):
                                 result = cursor.fetchall()
                                 if result:
                                     en_name = result[0][3]  # 获取该face_id对应的英文名
+                                    cn_name = result[0][2]  # 获取该face_id对应的中文名
                                 else:
                                     raise Exception
                             except Exception as e:
@@ -195,6 +199,12 @@ class FaceProcessingThread(QThread):
                                 cv2.putText(realTimeFrame, en_name, (_x - 5, _y - 10), cv2.FONT_HERSHEY_SCRIPT_SIMPLEX,
                                             1,
                                             (0, 97, 255), 2)  # 绘制该人员身份英文名
+                                # cv2.putText(realTimeFrame, cn_name, (_x - 15, _y - 20), cv2.FONT_HERSHEY_SCRIPT_SIMPLEX,
+                                #             1,
+                                #             (0, 97, 255), 2)  # 绘制该人员身份中文名
+
+                                # self.cv2ImgAddText(realTimeFrame, en_name, _x - 5, _y - 10,
+                                #                    (0, 97, 255), 2)
                             else:  # 不可靠识别
                                 # 若置信度评分大于置信度阈值，该人脸可能是陌生人
                                 cv2.putText(realTimeFrame, 'unknown', (_x - 5, _y - 10), cv2.FONT_HERSHEY_SIMPLEX, 1,
@@ -278,6 +288,19 @@ class FaceProcessingThread(QThread):
 
             else:
                 continue
+
+    def cv2ImgAddText(self, img, text, left, top, textColor=(0, 255, 0), textSize=20):
+        if (isinstance(img, numpy.ndarray)):  # 判断是否OpenCV图片类型
+            img = Image.fromarray(cv2.cvtColor(img, cv2.COLOR_BGR2RGB))
+        # 创建一个可以在给定图像上绘图的对象
+        draw = ImageDraw.Draw(img)
+        # 字体的格式
+        fontStyle = ImageFont.truetype(
+            "font/simsun.ttc", textSize, encoding="utf-8")
+        # 绘制文本
+        draw.text((left, top), text, textColor, font=fontStyle)
+        # 转换回OpenCV格式
+        return cv2.cvtColor(numpy.asarray(img), cv2.COLOR_RGB2BGR)
 
     def stop(self):
         self.isRunning = False
@@ -493,7 +516,7 @@ class CoreUI(QMainWindow):
         try:
             if not os.path.isfile(self.database):  # 如果数据库文件不存在
                 raise DataBaseNotFoundError  # 抛出数据库没有找到错误
-            if not os.path.isfile(self.trainingData):    # 如果训练数据模型不存在
+            if not os.path.isfile(self.trainingData):  # 如果训练数据模型不存在
                 raise TrainingDataNotFoundError  # 抛出训练数据模型没有找到异常
 
             conn = sqlite3.connect(self.database)
@@ -530,16 +553,16 @@ class CoreUI(QMainWindow):
 
     # 定时器触发事件，展示图片
     def updateFrame(self):
-        if self.cap.isOpened(): # 确保摄像头已经打开
+        if self.cap.isOpened():  # 确保摄像头已经打开
             if not self.captureQueue.empty():  # 图像队列不为空
                 captureData = self.captureQueue.get()  # 获取图片数据
                 realTimeFrame = captureData.get('realTimeFrame')  # 获得实时图片
                 self.displayImage(realTimeFrame, self.realTimeCaptureLabel)  # 展示图片
 
-    #展示图片，updateFrame调用子程序
+    # 展示图片，updateFrame调用子程序
     def displayImage(self, img, qlabel):
         # BGR -> RGB
-        img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)  #将图片转换为RGB格式
+        img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)  # 将图片转换为RGB格式
         # default：The image is stored using 8-bit indexes into a colormap， for example：a gray image
         qformat = QImage.Format_Indexed8  # 默认为8为灰度图片
 
@@ -583,7 +606,7 @@ class CoreUI(QMainWindow):
                 if self.isBellEnabled:  # 如果可以进行响铃
                     p1 = multiprocessing.Process(target=CoreUI.bellProcess, args=(self.logQueue,))  # 定义设备响铃进程
                     p1.start()  # 启动进程
-                    jobs.append(p1)   # 将进程保存到jobs里面进行管理
+                    jobs.append(p1)  # 将进程保存到jobs里面进行管理
 
                 # 是否进行TelegramBot推送
                 if self.isTelegramBotPushEnabled:
@@ -591,7 +614,8 @@ class CoreUI(QMainWindow):
                         img = './unknown/{}.jpg'.format(timestamp)
                     else:
                         img = None
-                    p2 = multiprocessing.Process(target=CoreUI.telegramBotPushProcess, args=(self.logQueue, img))  # 定义TelegramBot推送进程
+                    p2 = multiprocessing.Process(target=CoreUI.telegramBotPushProcess,
+                                                 args=(self.logQueue, img))  # 定义TelegramBot推送进程
                     p2.start()  # 启动TelegramBot推送进程
                     jobs.append(p2)  # 将进程保存到jobs里面进行管理
 
@@ -638,7 +662,7 @@ class CoreUI(QMainWindow):
 
     # TelegramBot设置按钮点击事件
     def telegramBotSettings(self):
-        cfg = ConfigParser()    # 定义一个配置类
+        cfg = ConfigParser()  # 定义一个配置类
         cfg.read('./config/telegramBot.cfg', encoding='utf-8-sig')  # 读取配置
         read_only = cfg.getboolean('telegramBot', 'read_only')  # 获取telegramBot组下read_only配置
 
