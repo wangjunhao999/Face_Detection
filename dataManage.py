@@ -200,7 +200,7 @@ class DataManageUI(QWidget):
         face_cascade = cv2.CascadeClassifier('./haarcascades/haarcascade_frontalface_default.xml')  # 加载opencv官方人脸分类器
         faces = face_cascade.detectMultiScale(gray, scaleFactor=1.3, minNeighbors=5, minSize=(90, 90))  # 进行人脸检测
 
-        if len(faces) == 0:  #如果没有检测到人脸
+        if len(faces) == 0:  # 如果没有检测到人脸
             return None, None
         (x, y, w, h) = faces[0]  # 前一步采集的时候保证只有一个人脸
         return gray[y:y + w, x:x + h], faces[0]  # 返回人脸检测区域，和人脸检测信息
@@ -240,6 +240,8 @@ class DataManageUI(QWidget):
                     continue
                 image_path = subject_dir_path + '/' + image_name  # 获取图片路径
                 image = cv2.imread(image_path)  # 读取图片
+                if image is None:
+                    continue
                 face, rect = self.detectFace(image)  # 调用detectFace检测图片
                 if face is not None:  # 如果检测到人脸
                     faces.append(face)
@@ -270,9 +272,10 @@ class DataManageUI(QWidget):
                 if not os.path.exists('./recognizer'):  # 如果不存在trainning数据保存文件夹
                     os.makedirs('./recognizer')  # 创建文件夹
 
-            faces, labels = self.prepareTrainingData(self.datasets)  # 调用prepareTrainingData对数据进行预处理
-            face_recognizer.train(faces, np.array(labels))  # 对人脸识别器进行训练
-            face_recognizer.save('./recognizer/trainingData.yml')  # 将训练数据保存
+                faces, labels = self.prepareTrainingData(self.datasets)  # 调用prepareTrainingData对数据进行预处理
+                face_recognizer.train(faces, np.array(labels))  # 对人脸识别器进行训练
+                face_recognizer.save('./recognizer/trainingData.yml')  # 将训练数据保存
+
         except FileNotFoundError:
             logging.error('系统找不到人脸数据目录{}'.format(self.datasets))
             self.trainButton.setIcon(QIcon('./icons/error.png'))
